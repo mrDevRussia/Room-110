@@ -33,6 +33,6 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_BODY: ${{ github.event.issue.body || github.event.comment.body }}
+          ISSUE_BODY: "${{ github.event.issue.title }} ${{ github.event.issue.body }} ${{ github.event.comment.body }}"
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python room110_core.py
