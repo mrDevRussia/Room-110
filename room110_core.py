@@ -52,6 +52,23 @@ def execute_and_pr(consensus, token, repo):
         "title": "Council Approved Fix", "head": branch, "base": "main", "body": consensus
     })
     return True
+    
+def call_groq(prompt):
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [{"role": "system", "content": f"Rules: {rules}"}, {"role": "user", "content": prompt}]
+        }
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+        
+        # بدل ما نعتمد على .json()، هنطبع الرد الخام لو حصل خطأ
+        if response.status_code != 200:
+            print(f"[🔴] API FAILED with status {response.status_code}")
+            print(f"[🔴] RAW RESPONSE: {response.text}") # ده اللي هيقولنا المشكلة الحقيقية
+            sys.exit(1)
+            
+        data = response.json()
+        return data['choices'][0]['message']['content']
+
 
 def main():
     rules = fetch_bedrock_rules()
