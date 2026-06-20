@@ -118,8 +118,10 @@ def main():
         print("[🔴] Missing required environment credentials.")
         sys.exit(1)
         
+    print(f"[📋] Received Context Payload: {issue_body}") # سطر برمجى جديد للتتبع ومعرفة ماذا يقرأ السكربت
+    
     if not issue_body:
-        print("[⚠️] No Issue Body or Comment context detected. Skipping active run.")
+        print("[⚠️] No Issue Title, Body or Comment context detected. Skipping active run.")
         return
 
     gh = GitHubNativeClient(gh_token, gh_repo)
