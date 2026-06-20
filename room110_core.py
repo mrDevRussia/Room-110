@@ -4,15 +4,15 @@ import json
 import requests
 
 def get_tech_context():
-    """Fetches live architecture documentation from your website to preserve immutable context."""
+    """Fetches live architecture documentation from your website."""
     url = "https://www.bedrock.abrdns.com"
     try:
         response = requests.get(url, timeout=15)
         if response.status_code == 200:
-            print("[Room 110] Live architectural context pulled successfully from the documentation site.")
-            return response.text[:8000]  # Chunked to fit token limits efficiently
+            print("[Room 110] Live architectural context pulled successfully.")
+            return response.text[:8000]
     except Exception as e:
-        print(f"[Room 110] Warning: Failed to connect to documentation site ({e}). Falling back to hardcoded rules.")
+        print(f"[Room 110] Warning: Falling back to hardcoded rules.")
     
     return """
     Language: BedRock (.br), Core OS: Venilla OS.
@@ -20,67 +20,36 @@ def get_tech_context():
     Rule on Rdf: Differentiate strictly between Hardware Labels (physical direct addresses) and VRegs (dynamic pointer allocation).
     """
 
-def query_gemini(prompt, api_key):
-    """Invokes Gemini 1.5 Flash adaptively based on the key type (API Key vs Cloud Access Token)."""
-    # Clean any accidental spaces or newlines from the key
-    api_key = api_key.strip()
-    
-    # Mode 1: Standard AI Studio Key
-    if api_key.startswith("AIzaSy"):
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-        headers = {'Content-Type': 'application/json'}
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    
-    # Mode 2: Cloud Access Token (Starts with AQ. or other enterprise formats)
-    else:
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {api_key}' # Passing the AQ token securely in the headers
-        }
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-
-    try:
-        res = requests.post(url, headers=headers, json=payload, timeout=30)
-        data = res.json()
-        
-        if 'candidates' in data:
-            return data['candidates'][0]['content']['parts'][0]['text']
-        else:
-            print(f"[Room 110] ❌ Gemini API Error Details: {json.dumps(data, indent=2)}")
-            return None
-            
-    except Exception as e:
-        print(f"[Room 110] ❌ Error querying Gemini: {e}")
-        return None
-
-def query_groq(prompt, api_key):
-    """Invokes Llama 3 via Groq to act as the Devil's Advocate and review code for byte-level validation."""
+def query_groq(prompt, model_name, api_key):
+    """Invokes Groq dynamically with the specified model."""
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama3-8b-8192",
+        "model": model_name,
         "messages": [{"role": "user", "content": prompt}]
     }
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=30)
-        return res.json()['choices'][0]['message']['content']
+        data = res.json()
+        if 'choices' in data:
+            return data['choices'][0]['message']['content']
+        else:
+            print(f"[Room 110] ❌ Groq Error Details: {json.dumps(data, indent=2)}")
+            return None
     except Exception as e:
-        print(f"[Room 110] Error querying Groq: {e}")
+        print(f"[Room 110] ❌ Error querying Groq: {e}")
         return None
 
 def main():
-    print("[Room 110] Initiating autonomous compiler development loop...")
+    print("[Room 110] Initiating autonomous compiler development loop via Groq Architecture...")
     
-    # Securely retrieve tokens from environment variables
-    gemini_key = os.getenv("GEMINI_API_KEY")
+    # Retrieve only Groq Key now
     groq_key = os.getenv("GROQ_API_KEY")
-    
-    if not gemini_key or not groq_key:
-        print("[🔴 CRITICAL ERROR] API Keys are missing from GitHub Secrets! Add them to resume operation.")
+    if not groq_key:
+        print("[🔴 CRITICAL ERROR] GROQ_API_KEY is missing from GitHub Secrets!")
         sys.exit(1)
         
     context = get_tech_context()
@@ -95,36 +64,28 @@ def main():
         current_code = "// BedRock Compiler source file not found or initializing."
 
     discussion_prompt = f"""
-    You are the Lead Software Architect of Room 110, dedicated to developing the BedRock Language Compiler.
-    Here is the live immutable technical context of the project:
-    ---
-    {context}
-    ---
-    Here is the current compiler source code under inspection:
-    ---
-    {current_code}
-    ---
-    Task: Analyze the file and propose the next structural evolution for Code Generation or IR optimization. 
-    Strictly adhere to 'No Magic' and 'Byte-Level Validation'. Provide clear code blocks.
+    You are the Lead Software Architect of Room 110, developing the BedRock Language Compiler.
+    Context: {context}
+    Current Code: {current_code}
+    Task: Propose the next logical development step or bug fix for the MIPS backend. Adhere to 'No Magic'.
     """
 
-    print("[Room 110] Dispatching payload to Lead Architect (Gemini) for architectural solutions...")
-    gemini_proposal = query_gemini(discussion_prompt, gemini_key)
+    print("[Room 110] Dispatching payload to Lead Architect (Llama-3-70B)...")
+    proposal = query_groq(discussion_prompt, "llama3-70b-8192", groq_key)
     
-    if gemini_proposal:
-        print("[Room 110] Proposal acquired. Transitioning payload to Devil's Advocate (Groq/Llama) for strict review...")
+    if proposal:
+        print("[Room 110] Proposal acquired. Transitioning to Devil's Advocate (Llama-3-8B) for strict review...")
         review_prompt = f"""
-        You are the Architectural Reviewer and Devil's Advocate of Room 110.
-        Review the proposed mutation written by the Lead Architect:
-        {gemini_proposal}
-        Cross-reference it with BedRock guidelines and bare-metal MIPS rules. Does this code break structural assumptions or use implicit 'magic'? Provide your final consensus report.
+        Review this proposed compiler mutation for BedRock:
+        {proposal}
+        Does this code break bare-metal MIPS validation or use implicit 'magic'? Provide the final consensus report.
         """
-        final_review = query_groq(review_prompt, groq_key)
+        final_review = query_groq(review_prompt, "llama3-8b-8192", groq_key)
         
         print("\n=== 🏛️ ROOM 110 CONSENSUS REPORT ===\n")
         print(final_review)
         print("\n====================================\n")
-        print("[Room 110] Run completed successfully. GitHub will dispatch a notification summary to Chief Architect Karim.")
+        print("[Room 110] Run completed successfully.")
     else:
         print("[Room 110] Process aborted: Failed to fetch model responses.")
 
