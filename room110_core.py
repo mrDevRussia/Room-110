@@ -29,9 +29,18 @@ def query_gemini(prompt, api_key):
     }
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=30)
-        return res.json()['candidates'][0]['content']['parts'][0]['text']
+        data = res.json()
+        
+        # التأكد من وجود رد سليم
+        if 'candidates' in data:
+            return data['candidates'][0]['content']['parts'][0]['text']
+        else:
+            # لو جوجل بعتت إيرور، هنطبع الإيرور نفسه عشان نفهمه
+            print(f"[Room 110] ❌ Gemini API Error Details: {json.dumps(data, indent=2)}")
+            return None
+            
     except Exception as e:
-        print(f"[Room 110] Error querying Gemini: {e}")
+        print(f"[Room 110] ❌ Error querying Gemini: {e}")
         return None
 
 def query_groq(prompt, api_key):
