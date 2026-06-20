@@ -17,18 +17,19 @@ import requests
 # ==========================================
 BEDROCK_RULES_URL = "".join(["https://", "bedrock", ".abrdns", ".com"])
 GROQ_API_URL = "".join(["https://", "api", ".groq", ".com/openai/v1/chat/completions"])
-GROQ_MODEL = "llama-3.3-70b-versatile"
+
+# التبديل إلى نموذج 8B لتفادي قيود الـ TPM الصارمة للنموذج الأكبر
+GROQ_MODEL = "llama3-8b-8192"
 
 # Target extensions for repository scanning
 TARGET_EXTENSIONS = [".rs"]
 HISTORY_LOG_PATH = "refactor_history.log"
 
-# Aggressive safeguard for ultra-low 12,000 Groq TPM tier limit
-# 12,000 characters ~ 3,000 tokens. Leaves huge headroom for prompts and responses.
-MAX_FILE_CHAR_LIMIT = 12000 
+# إعادة رفع سقف الحروف المسموح بها للملف بما يتناسب مع حدود النموذج الجديد
+MAX_FILE_CHAR_LIMIT = 25000 
 
-# Pacing delay (seconds) between file audits to let the TPM rate limit bucket reset
-API_COOLDOWN_DELAY = 25
+# فترة انتظار آمنة (بالثواني) بين الفحوصات لضمان استقرار التدفق
+API_COOLDOWN_DELAY = 10
 
 FALLBACK_RULES = """
 Rule 1: Strict MIPS byte-level and alignment validation.
@@ -143,8 +144,8 @@ def run_council_debate(file_path: str, current_code: str, rules: str, groq_key: 
         
     print(f"[🤖 Agent 1] Optimization proposal formulated for '{file_path}'.")
     
-    # Enforce pacing delay between agent internal handoffs to prevent TPM exhaustion
-    time.sleep(5)
+    # فترة انتظار قصيرة بين خروج العميل الأول ودخول العميل الثاني لمنع الاندفاع اللحظي للـ Tokens
+    time.sleep(2)
     
     # 2. Reviewer Agent inspects and refines the proposal
     print(f"[🤖 Agent 2] Stress-testing and reviewing the proposal for '{file_path}'...")
@@ -362,7 +363,7 @@ def main():
         if not current_code:
             continue
             
-        # PROACTIVE SIZE GUARD: Exclude files that violate the ultra-strict 12k TPM ceiling
+        # فحص حجم الملف بناءً على الحدود الجديدة والأكثر مرونة لـ Llama-3 8B
         if len(current_code) > MAX_FILE_CHAR_LIMIT:
             print(f"[⚠️] Skipping '{file_path}' - File size ({len(current_code)} chars) exceeds targeted safe tier threshold ({MAX_FILE_CHAR_LIMIT} chars).")
             continue
@@ -382,7 +383,7 @@ def main():
             else:
                 print(f"[⚠️] Failed to parse a valid uncorrupted pure Rust snippet block for artifact path: {file_path}")
 
-            # Apply a calculated delay after a successful processing iteration to reset the TPM bucket
+            # تهدئة الطلبات للحفاظ على الـ TPM الخاص بالحساب البرمجي
             print(f"[⏱️] Cooling down for {API_COOLDOWN_DELAY} seconds to safeguard Groq TPM rate limits...")
             time.sleep(API_COOLDOWN_DELAY)
 
