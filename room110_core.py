@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-غرفة 110: وكيل إعادة الهيكلة التلقائي والمستقل لمشروع BedRock (معمارية MIPS)
-يعمل هذا السكربت بالكامل داخل بيئة GitHub Actions دون أي اعتمادات خارجية على subprocess CLI.
+Room 110: Autonomous Proactive Refactoring Agent for BedRock Compiler Backend
+Scope: Global Repository Audit (Full Repository Sweep)
 """
 
 import os
@@ -13,15 +13,17 @@ import base64
 import requests
 
 # ==========================================
-# الإعدادات والثوابت العامة
+# CONFIGURATION & CONSTANTS
 # ==========================================
 BEDROCK_RULES_URL = "https://bedrock.abrdns.com"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama-3.3-70b-versatile"
-TARGET_FILE_PATH = "src/mips.rs"
+
+# Target extensions for repository scanning
+TARGET_EXTENSIONS = [".rs"]
 HISTORY_LOG_PATH = "refactor_history.log"
 
-# القواعد الاحتياطية في حال فشل الاتصال بالموقع
+# Fallback specifications if the remote server is unreachable
 FALLBACK_RULES = """
 Rule 1: Strict MIPS byte-level and alignment validation.
 Rule 2: Eliminate redundant register allocations and optimize branch delays.
@@ -30,7 +32,7 @@ Rule 4: Output pure Rust syntax exclusively bounded inside a single ```rust bloc
 """
 
 # ==========================================
-# الموجهات الصارمة لمنع الهلوسة البرمجية
+# SYSTEM PROMPTS (ANTI-HALLUCINATION)
 # ==========================================
 PROPOSAL_SYSTEM_PROMPT = """
 You are the Lead Proposal Agent for the BedRock Compiler Backend Engineering Council.
@@ -39,7 +41,7 @@ Your sole domain of expertise is compiler optimization, MIPS instruction set arc
 CRITICAL DIRECTIVES:
 1. You MUST operate strictly within the boundaries of a MIPS backend compiler. Do NOT hallucinate unrelated features.
 2. Analyze the current source code against the provided BedRock language specs. Identify technical debt, optimization bottlenecks, or safety violations.
-3. If no optimization is required, you must reply with exactly "NO_CHANGES_REQUIRED".
+3. If no optimization is required for this specific file, you must reply with exactly "NO_CHANGES_REQUIRED". Do not output anything else.
 4. Output your final proposed Rust code in a single ```rust block.
 """
 
@@ -54,71 +56,67 @@ CRITICAL DIRECTIVES:
 """
 
 # ==========================================
-# وظائف الاتصال والتحقق من الأخطاء
+# CONNECTIVITY & ERROR HANDLING UTILITIES
 # ==========================================
 def fetch_bedrock_rules() -> str:
-    """جلب قواعد لغة BedRock من الموقع الرسمي مع تفعيل آلية اتصال احتياطية"""
-    print("[🔄] جاري جلب قواعد BedRock من الموقع الرسمي...")
+    """Fetches BedRock language specifications from the remote endpoint with fallback safety."""
+    print("[🔄] Fetching BedRock rules from the official site...")
     try:
         response = requests.get(BEDROCK_RULES_URL, timeout=12)
         if response.status_code == 200 and response.text.strip():
-            print("[✅] تم تحميل قواعد لغة BedRock بنجاح.")
+            print("[✅] BedRock language rules loaded successfully.")
             return response.text
         else:
-            print(f"[⚠️] استجابة غير متوقعة {response.status_code}. سيتم استخدام القواعد الاحتياطية.")
+            print(f"[⚠️] Unexpected response status {response.status_code}. Deploying fallback rules.")
             return FALLBACK_RULES
     except Exception as e:
-        print(f"[⚠️] فشل الاتصال بالخادم ({str(e)}). سيتم استخدام القواعد الاحتياطية.")
+        print(f"[⚠️] Failed to connect to server ({str(e)}). Deploying fallback rules.")
         return FALLBACK_RULES
 
 def safe_groq_api_call(headers: dict, payload: dict) -> str:
-    """إرسال طلبات آمنة لـ Groq API مع فحص دقيق للبيانات المستلمة لمنع أي KeyError"""
+    """Executes validated calls to the Groq API, safely managing formatting structures."""
     try:
-        response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=45)
+        response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=60)
     except Exception as e:
-        print(f"[🔴] خطأ في الاتصال بالشبكة مع Groq API: {str(e)}")
+        print(f"[🔴] Network connection failure with Groq API: {str(e)}")
         sys.exit(1)
         
     if response.status_code != 200:
-        print(f"[🔴] فشل طلب Groq API برمز حالة: {response.status_code}")
-        print(f"[🔴] الرد الخام المستلم من الخادم:\n{response.text}")
+        print(f"[🔴] Groq API request failed with status code: {response.status_code}")
+        print(f"[🔴] Raw server response:\n{response.text}")
         sys.exit(1)
         
     try:
         data = response.json()
     except Exception as e:
-        print(f"[🔴] فشل في تحليل رد الـ JSON المستلم: {str(e)}")
-        print(f"[🔴] البيانات الخام:\n{response.text}")
+        print(f"[🔴] Failed to parse JSON response payload: {str(e)}")
+        print(f"[🔴] Raw text received:\n{response.text}")
         sys.exit(1)
         
     if 'choices' not in data or not data['choices']:
-        print("[🔴] بنية غير صالحة: حقل 'choices' مفقود أو فارغ في رد Groq API.")
-        print(f"[🔴] الرد الكامل:\n{json.dumps(data, indent=2)}")
+        print("[🔴] Invalid structure: Missing or empty 'choices' field in Groq API response.")
+        print(f"[🔴] Full payload response:\n{json.dumps(data, indent=2)}")
         sys.exit(1)
         
     return data['choices'][0]['message']['content']
 
 # ==========================================
-# حلقة النقاش واتخاذ القرار (Council Debate)
+# MULTI-AGENT COUNCIL DEBATE LOOP
 # ==========================================
-def run_council_debate(current_code: str, rules: str, groq_key: str) -> tuple:
-    """تنسيق حلقة نقاش ذكية بين خبير الاقتراحات ومراجع الجودة"""
-    if not groq_key:
-        print("[🔴] خطأ في البيئة: مفتاح 'GROQ_API_KEY' غير متوفر.")
-        sys.exit(1)
-        
+def run_council_debate(file_path: str, current_code: str, rules: str, groq_key: str) -> tuple:
+    """Coordinates an analytical discussion loop between the Proposal and Reviewer Agents."""
     headers = {
         "Authorization": f"Bearer {groq_key}",
         "Content-Type": "application/json"
     }
     
-    # 1. خبير الاقتراحات يفحص الكود الحالي
-    print("[🤖 خبير 1] جاري فحص ملف MIPS والبحث عن ديون تقنية...")
+    # 1. Proposal Agent evaluates the file
+    print(f"[🤖 Agent 1] Auditing file '{file_path}' for technical debt...")
     proposal_prompt = f"""
     Rules:
     {rules}
     
-    Current Code in '{TARGET_FILE_PATH}':
+    Current Code in '{file_path}':
     ```rust
     {current_code}
     ```
@@ -138,13 +136,13 @@ def run_council_debate(current_code: str, rules: str, groq_key: str) -> tuple:
     proposal_output = safe_groq_api_call(headers, proposal_payload)
     
     if "NO_CHANGES_REQUIRED" in proposal_output:
-        print("[✅] قرر مجلس الخبراء أن الكود الحالي مثالي ومستقر تماماً.")
+        print(f"[✅] Proposal Agent verified that '{file_path}' is optimal. Skipping refactor.")
         return None, ""
         
-    print("[🤖 خبير 1] تم تقديم اقتراح لتحسين الأداء وهيكلة الكود.")
+    print(f"[🤖 Agent 1] Optimization proposal formulated for '{file_path}'.")
     
-    # 2. خبير المراجعة يدقق في الاقتراح ويصيغ الكود النهائي للـ Compiler
-    print("[🤖 خبير 2] جاري مراجعة وتدقيق الاقتراح المقدم للتأكد من الملاءمة الصارمة...")
+    # 2. Reviewer Agent inspects and refines the proposal
+    print(f"[🤖 Agent 2] Stress-testing and reviewing the proposal for '{file_path}'...")
     reviewer_prompt = f"""
     Rules:
     {rules}
@@ -170,26 +168,32 @@ def run_council_debate(current_code: str, rules: str, groq_key: str) -> tuple:
     }
     
     final_consensus = safe_groq_api_call(headers, reviewer_payload)
-    print("[✅] تم التوصل إلى اتفاق نهائي ومصادقة الكود بنجاح.")
+    print(f"[✅] Consensus reached and validated successfully for '{file_path}'.")
     
-    # صياغة تقرير الخبراء ليوضع في الـ Pull Request
-    full_report_body = f"""### 🏛️ تقرير مجلس خبراء الغرفة 110 (Room 110 Council)
+    # Generate structured Markdown report trail for GitHub PR description
+    audit_trail = f"""**Target File:** `{file_path}`
+<details>
+<summary>🔍 Click to view Proposal Agent Diagnostics</summary>
 
-تم إجراء تدقيق استباقي ومقارنة الكود الحالي مع معايير لغة **BedRock**.
-
-#### 🔍 المرحلة الأولى: تشخيص خبير الاقتراحات (Proposal)
 {proposal_output}
 
-#### 🛠️ المرحلة الثانية: قرار ومراجعة خبير الجودة والتوافق (Reviewer)
+</details>
+
+<details>
+<summary>🛠️ Click to view Reviewer Agent Consensus Decision</summary>
+
 {final_consensus}
+
+</details>
+---
 """
-    return final_consensus, full_report_body
+    return final_consensus, audit_trail
 
 # ==========================================
-# التعامل المباشر مع واجهة GitHub REST API
+# GITHUB NATIVE REST API CLIENT
 # ==========================================
 class GitHubNativeClient:
-    """عميل تفاعل مباشر مع GitHub REST API بدون استخدام subprocess"""
+    """Direct implementation interface with the GitHub v3 REST API without subprocess dependency."""
     def __init__(self, token: str, repo: str):
         self.token = token
         self.repo = repo
@@ -202,21 +206,28 @@ class GitHubNativeClient:
         
     def check_response_status(self, response, task_name: str):
         if response.status_code not in [200, 201, 202, 204]:
-            print(f"[🔴] فشل إجراء GitHub API أثناء: {task_name}")
-            print(f"[🔴] رمز الاستجابة: {response.status_code}")
-            print(f"[🔴] تفاصيل الرد:\n{response.text}")
+            print(f"[🔴] GitHub API action failed during: {task_name}")
+            print(f"[🔴] Response Status Code: {response.status_code}")
+            print(f"[🔴] Server Error Details:\n{response.text}")
             sys.exit(1)
 
     def get_default_branch(self) -> str:
         res = requests.get(self.base_url, headers=self.headers)
-        self.check_response_status(res, "جلب معلومات المستودع الأساسية")
+        self.check_response_status(res, "Fetching repository default branch base parameters")
         return res.json().get("default_branch", "main")
 
     def get_branch_sha(self, branch: str) -> str:
         url = f"{self.base_url}/git/ref/heads/{branch}"
         res = requests.get(url, headers=self.headers)
-        self.check_response_status(res, f"جلب SHA للفرع {branch}")
+        self.check_response_status(res, f"Fetching git commit reference SHA for branch: {branch}")
         return res.json()["object"]["sha"]
+
+    def get_repository_tree(self, branch_sha: str) -> list:
+        """Fetches the complete repository directory structural path tree recursively in a single run."""
+        url = f"{self.base_url}/git/trees/{branch_sha}?recursive=1"
+        res = requests.get(url, headers=self.headers)
+        self.check_response_status(res, "Fetching full recursive directory repository tree mapping")
+        return [item['path'] for item in res.json().get('tree', []) if item['type'] == 'blob']
 
     def create_new_branch(self, new_branch_name: str, base_sha: str):
         url = f"{self.base_url}/git/refs"
@@ -224,23 +235,23 @@ class GitHubNativeClient:
             "ref": f"refs/heads/{new_branch_name}",
             "sha": base_sha
         }
-        print(f"[🐙] جاري إنشاء فرع مخصص بعيد: {new_branch_name}...")
+        print(f"[🐙] Creating remote feature tracking branch: {new_branch_name}...")
         res = requests.post(url, headers=self.headers, json=payload)
-        self.check_response_status(res, f"إنشاء الفرع الجديد {new_branch_name}")
+        self.check_response_status(res, f"Creating reference branch endpoints for {new_branch_name}")
 
     def get_file_metadata(self, path: str, branch: str) -> tuple:
-        """جلب محتوى الملف وبيانات SHA الخاصة به"""
+        """Downloads specific target file context payloads along with blob unique SHA hashes."""
         url = f"{self.base_url}/contents/{path}?ref={branch}"
         res = requests.get(url, headers=self.headers)
         if res.status_code == 404:
             return None, None
-        self.check_response_status(res, f"تحميل بيانات الملف {path}")
+        self.check_response_status(res, f"Downloading code metadata contents for {path}")
         data = res.json()
         content_decoded = base64.b64decode(data["content"]).decode("utf-8")
         return content_decoded, data["sha"]
 
     def commit_file_change(self, path: str, content: str, commit_message: str, branch: str, sha: str = None):
-        """عمل Commit وتحديث للملف مباشرة على الـ Branch"""
+        """Applies explicit updates to a target blob and executes a Git commit directly."""
         url = f"{self.base_url}/contents/{path}"
         content_b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
         
@@ -252,12 +263,12 @@ class GitHubNativeClient:
         if sha:
             payload["sha"] = sha
             
-        print(f"[🐙] جاري حفظ التغييرات وتطبيق Commit للملف '{path}' على الفرع '{branch}'...")
+        print(f"[🐙] Committing code modifications to target path '{path}' on branch '{branch}'...")
         res = requests.put(url, headers=self.headers, json=payload)
-        self.check_response_status(res, f"تنفيذ Commit للملف {path}")
+        self.check_response_status(res, f"Executing operational file blob update commit for {path}")
 
     def create_pull_request(self, title: str, head_branch: str, base_branch: str, body: str) -> str:
-        """إنشاء طلب دمج (Pull Request) بربط مباشر"""
+        """Deploys a finalized unified Pull Request tracking item with report context details."""
         url = f"{self.base_url}/pulls"
         payload = {
             "title": title,
@@ -265,16 +276,16 @@ class GitHubNativeClient:
             "base": base_branch,
             "body": body
         }
-        print(f"[🐙] جاري إرسال طلب الدمج (Pull Request) من '{head_branch}' إلى '{base_branch}'...")
+        print(f"[🐙] Opening unified production Pull Request from '{head_branch}' tracking to base branch '{base_branch}'...")
         res = requests.post(url, headers=self.headers, json=payload)
-        self.check_response_status(res, "إنشاء طلب الدمج")
+        self.check_response_status(res, f"Creating Pull Request event target connection")
         return res.json().get("html_url", "")
 
     def check_merged_pull_requests(self, base_branch: str) -> list:
-        """جلب طلبات الدمج المكتملة مؤخراً للتعلم منها"""
+        """Gathers historical information from recently integrated pull requests for autonomous learning."""
         url = f"{self.base_url}/pulls?state=closed&base={base_branch}&sort=updated&direction=desc&per_page=10"
         res = requests.get(url, headers=self.headers)
-        self.check_response_status(res, "مراجعة أرشيف طلبات الدمج")
+        self.check_response_status(res, "Reviewing repository closed pull request logs for training heuristics")
         prs = res.json()
         merged_summaries = []
         for pr in prs:
@@ -288,41 +299,39 @@ class GitHubNativeClient:
         return merged_summaries
 
 # ==========================================
-# دورة التنفيذ الأساسية للوكيل المستقل
+# AGENT MAIN SYSTEM CORE RUNTIME LOOP
 # ==========================================
 def main():
-    print("[🚀] تفعيل نظام الوكيل الذكي للغرفة 110 لإعادة الهيكلة والتطوير...")
+    print("[🚀] Activating Room 110 Autonomous Refactoring Agent - Full Repository Sweep Protocol...")
     
-    # التحقق من متغيرات البيئة الأساسية في GitHub Runner
+    # Environment variable security validations
     gh_token = os.getenv("GITHUB_TOKEN")
     gh_repo = os.getenv("GITHUB_REPOSITORY")
     groq_key = os.getenv("GROQ_API_KEY")
     
-    if not gh_token or not gh_repo:
-        print("[🔴] خطأ إداري: متغيرات البيئة GITHUB_TOKEN أو GITHUB_REPOSITORY مفقودة.")
+    if not all([gh_token, gh_repo, groq_key]):
+        print("[🔴] Environment configuration error: Missing required variables (GITHUB_TOKEN, GITHUB_REPOSITORY, GROQ_API_KEY).")
         sys.exit(1)
         
     gh = GitHubNativeClient(gh_token, gh_repo)
-    
-    # 1. جلب شروط وقواعد لغة BedRock
     rules = fetch_bedrock_rules()
     
-    # 2. تحديد الفرع الافتراضي وجلب الكود المستهدف الحالي
     base_branch = gh.get_default_branch()
-    print(f"[⚙️] الفرع الافتراضي للمستودع هو: {base_branch}")
+    base_sha = gh.get_branch_sha(base_branch)
+    print(f"[⚙️] Active Target Default Repository Base Branch Identified: {base_branch}")
     
-    current_code, target_file_sha = gh.get_file_metadata(TARGET_FILE_PATH, base_branch)
-    if current_code is None:
-        print(f"[⚠️] المسار '{TARGET_FILE_PATH}' غير موجود على الفرع الأساسي. سيتم إنشاء الملف الجديد.")
-        current_code = ""
+    # 1. Fetch entire structural codebase tree and apply targeted matching extension masks
+    all_files = gh.get_repository_tree(base_sha)
+    target_files = [f for f in all_files if any(f.endswith(ext) for ext in TARGET_EXTENSIONS)]
+    print(f"[⚙️] Detected {len(target_files)} relevant source codebase assets scoped for structural auditing.")
     
-    # 3. محرك التعلم الذاتي والتفاعل الاستباقي (Self-Learning)
-    print("[🧠] جاري فحص طلبات الدمج المكتملة للتعلم من تاريخ التطوير...")
+    # 2. Self-Learning Heuristics Framework
+    print("[🧠] Auditing recently integrated pull requests for evolutionary self-adaptation constraints...")
     merged_prs = gh.check_merged_pull_requests(base_branch)
     
     history_content, history_sha = gh.get_file_metadata(HISTORY_LOG_PATH, base_branch)
     if history_content is None:
-        history_content = "=== سجلات تاريخ التعلم الذاتي للغرفة 110 ===\n"
+        history_content = "=== Room 110 Self-Learning Intelligence History Log ===\n"
         
     updated_history = history_content
     learnings_found = False
@@ -330,59 +339,64 @@ def main():
     for pr in merged_prs:
         pr_identifier = f"PR #{pr['number']}"
         if pr_identifier not in updated_history:
-            print(f"[💡] تم رصد دمج سابق ({pr_identifier} - {pr['title']}). جاري إدماجه في قاعدة المعرفة المكتسبة...")
-            updated_history += f"\n[{pr['merged_at']}] تعلم من الدمج المكتمل لـ {pr_identifier}: عنوان: {pr['title']}.\n"
+            print(f"[💡] Found unlogged historical merge context ({pr_identifier} - {pr['title']}). Integrating into intelligence tracking logs...")
+            updated_history += f"\n[{pr['merged_at']}] Self-learning capture from finalized {pr_identifier}: Summary Concept: {pr['title']}.\n"
             learnings_found = True
             
-    # 4. بدء حلقة النقاش واتخاذ القرار
-    consensus_code_raw, full_report_body = run_council_debate(current_code, rules, groq_key)
+    # 3. Iterative Codebase Sweep Pipeline
+    pending_changes = {}
+    full_pr_report = "### 🏛️ Room 110: Council Global Repository Optimization Audit Report\n\nCodebase files have been proactively audited and analyzed against official **BedRock** safety specifications.\n\n"
     
-    if not consensus_code_raw:
-        # الكود حالياً في أفضل حالاته ولا يتطلب تعديلاً
+    for file_path in target_files:
+        print(f"\n[🔍] Actively scanning file artifact path: {file_path}")
+        current_code, file_sha = gh.get_file_metadata(file_path, base_branch)
+        if not current_code:
+            continue
+            
+        consensus_raw, audit_trail = run_council_debate(file_path, current_code, rules, groq_key)
+        
+        if consensus_raw:
+            code_match = re.search(r"```rust\s*\n(.*?)\n```", consensus_raw, re.DOTALL | re.IGNORECASE)
+            if code_match:
+                optimized_code = code_match.group(1).strip()
+                if current_code.strip() != optimized_code:
+                    print(f"[🔥] Technical debt detected and structural refactoring approved for: {file_path}")
+                    pending_changes[file_path] = {"code": optimized_code, "sha": file_sha}
+                    full_pr_report += audit_trail
+                else:
+                    print(f"[✅] Target asset content structure for '{file_path}' is identical to the verified ideal model state.")
+            else:
+                print(f"[⚠️] Failed to parse a valid uncorrupted pure Rust snippet block for artifact path: {file_path}")
+
+    # 4. Processing refactoring tasks if delta changes are present
+    if not pending_changes:
+        print("\n[🎉] Complete workspace architecture sweep finished. Codebase is flawless. No optimization interventions required.")
         if learnings_found:
-            print("[📝] جاري حفظ بيانات التعلم المكتسبة في ملف السجل التاريخي...")
+            print("[📝] Syncing historical evolution training updates directly on base branch mapping...")
             gh.commit_file_change(HISTORY_LOG_PATH, updated_history, "Room 110: Update intelligence and learnings history [skip ci]", base_branch, history_sha)
         return
-
-    # استخراج كود الـ Rust النظيف من رد الخبير بذكاء
-    code_match = re.search(r"```rust\s*\n(.*?)\n```", consensus_code_raw, re.DOTALL | re.IGNORECASE)
-    if not code_match:
-        print("[🔴] خطأ في معالجة المخرجات: لم يتم العثور على كتل كود Rust برمجية صحيحة في مخرجات المجلس.")
-        print(f"[🔴] المخرجات المستلمة بالكامل:\n{consensus_code_raw}")
-        sys.exit(1)
         
-    optimized_code = code_match.group(1).strip()
+    print(f"\n[🔥] Refactoring opportunities discovered in {len(pending_changes)} code elements. Orchestrating codebase modifications updates...")
     
-    # التحقق للتأكد من أن التعديل المقترح حقيقي وليس وهمياً أو مطابقاً للكود الحالي
-    if current_code.strip() == optimized_code:
-        print("[🎉] الكود المقترح متطابق تماماً مع الكود الحالي. لا توجد حاجة للتعديل.")
-        if learnings_found:
-            print("[📝] جاري حفظ السجلات الجديدة فقط...")
-            gh.commit_file_change(HISTORY_LOG_PATH, updated_history, "Room 110: Update intelligence log [skip ci]", base_branch, history_sha)
-        return
-
-    print("[🔥] تم اكتشاف فرص لتحسين وتعديل الكود البرمجي للمترجم!")
-    
-    # 5. التحديث وبدء تطبيق التعديلات بشكل آمن برمجياً
+    # Initialize a single consolidated remote feature tracking branch for atomic changesets
     timestamp = int(time.time())
-    feature_branch_name = f"refactor/room110-{timestamp}"
-    
-    base_sha = gh.get_branch_sha(base_branch)
+    feature_branch_name = f"refactor/room110-global-{timestamp}"
     gh.create_new_branch(feature_branch_name, base_sha)
     
-    # كتابة ملف كود Rust الجديد على الفرع المنشأ حديثاً
-    gh.commit_file_change(TARGET_FILE_PATH, optimized_code, "Room 110: Optimization sweep by engineering council", feature_branch_name, target_file_sha)
-    
-    # تحديث ملف التعلم الذاتي وحفظه على نفس الفرع
-    updated_history += f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] تم اقتراح إعادة هيكلة وتحديث الكود لملف {TARGET_FILE_PATH}.\n"
+    # Execute batch uploads across the unified feature target branch
+    for file_path, data in pending_changes.items():
+        gh.commit_file_change(file_path, data["code"], f"Room 110: Optimization sweep for {file_path}", feature_branch_name, data["sha"])
+        
+    # Append execution run trace information into execution logs
+    updated_history += f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Global refactoring update applied to targeted files list: {', '.join(pending_changes.keys())}.\n"
     _, current_hist_sha_branch = gh.get_file_metadata(HISTORY_LOG_PATH, feature_branch_name)
-    gh.commit_file_change(HISTORY_LOG_PATH, updated_history, "Room 110: Record execution to refactor history log", feature_branch_name, current_hist_sha_branch)
+    gh.commit_file_change(HISTORY_LOG_PATH, updated_history, "Room 110: Append global sweep results to history tracking logs", feature_branch_name, current_hist_sha_branch)
 
-    # 6. إرسال وفتح الـ Pull Request النهائي مع وضع تقرير الخبراء المجمع
-    pr_title = f"✨ Room 110 [Proactive Refactor]: Optimization Sweep for {TARGET_FILE_PATH}"
-    pr_url = gh.create_pull_request(pr_title, feature_branch_name, base_branch, full_report_body)
+    # 5. Open single comprehensive Pull Request mapping
+    pr_title = "✨ Room 110: Global Repository Optimization Audit Sweep"
+    pr_url = gh.create_pull_request(pr_title, feature_branch_name, base_branch, full_pr_report)
     
-    print(f"[🚀🎉] تم الانتهاء بنجاح! تم فتح طلب دمج استباقي جديد: {pr_url}")
+    print(f"[🚀🎉] Workspace global verification complete! Proactive system Pull Request deployed: {pr_url}")
 
 if __name__ == "__main__":
     main()
