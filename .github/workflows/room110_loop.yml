@@ -1,23 +1,26 @@
 name: Room 110 Autonomous Loop
 
 on:
+  issues:
+    types: [opened]
   issue_comment:
     types: [created]
   workflow_dispatch:
 
 permissions:
-  contents: write       # ضروري عشان الـ Commit والـ Push
-  pull-requests: write  # ضروري عشان الـ PR
-  issues: write         # عشان يكتب تقريره
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
   build-and-debate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }} # التوكن الأوتوماتيكي اللي جيت هاب بيوفره
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -30,7 +33,7 @@ jobs:
       - name: Run Room 110 Council
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # تمرير التوكن للسكربت
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.comment.issue_url.split('/').pop() }}
         run: python room110_core.py
