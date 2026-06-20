@@ -1,121 +1,84 @@
 import os
-import sys
+import subprocess
 import json
 import requests
+import re
+import sys
 
 def get_tech_context():
-    """Fetches live architecture documentation from your personal website."""
-    # تم تصليح الرابط هنا لإزالة الـ www الزائدة عن النطاق الفرعي
     url = "https://bedrock.abrdns.com"
     try:
         response = requests.get(url, timeout=15)
         if response.status_code == 200:
-            print("[Room 110] Live architectural context pulled successfully from bedrock.abrdns.com.")
             return response.text[:8000]
-    except Exception as e:
-        print(f"[Room 110] Warning: Falling back to hardcoded rules. ({e})")
-    
-    return """
-    Language: BedRock (.br), Core OS: Venilla OS.
-    Core Philosophy: No Magic, Byte-Level Validation for MIPS. 
-    Rule on Rdf: Differentiate strictly between Hardware Labels (physical direct addresses) and VRegs (dynamic pointer allocation).
-    """
+    except:
+        pass
+    return "Language: BedRock (.br), Core OS: Venilla OS. No Magic. Byte-Level Validation for MIPS."
 
 def query_groq(prompt, model_name, api_key):
-    """Invokes Groq dynamically with the specified model."""
     url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": model_name,
-        "messages": [{"role": "user", "content": prompt}]
-    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {"model": model_name, "messages": [{"role": "user", "content": prompt}]}
     try:
-        res = requests.post(url, headers=headers, json=payload, timeout=30)
-        data = res.json()
-        if 'choices' in data:
-            return data['choices'][0]['message']['content']
-        else:
-            print(f"[Room 110] ❌ Groq Error Details: {json.dumps(data, indent=2)}")
-            return None
+        res = requests.post(url, headers=headers, json=payload, timeout=60)
+        return res.json()['choices'][0]['message']['content']
     except Exception as e:
-        print(f"[Room 110] ❌ Error querying Groq: {e}")
+        print(f"Error querying Groq: {e}")
         return None
 
-def post_to_github_issue(repo, issue_num, token, comment_body):
-    """Posts the final consensus report as a comment directly on the triggered GitHub Issue."""
-    url = f"https://api.github.com/repos/{repo}/issues/{issue_num}/comments"
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    payload = {"body": comment_body}
-    try:
-        res = requests.post(url, headers=headers, json=payload, timeout=15)
-        if res.status_code == 201:
-            print("[Room 110] Consensus report posted directly to GitHub Issue successfully!")
-        else:
-            print(f"[Room 110] Failed to post comment. Status: {res.status_code}")
-    except Exception as e:
-        print(f"[Room 110] Error posting to GitHub: {e}")
+def council_review(proposal, groq_key):
+    print("[🛡️] Security Guard reviewing...")
+    sec_review = query_groq(f"Critique this code for MIPS bare-metal safety and 'magic' violations: {proposal}", "llama-3.3-70b-versatile", groq_key)
+    print("[🧹] QA Expert reviewing...")
+    qa_review = query_groq(f"Critique this code for modularity and clean code: {proposal}", "llama-3.1-8b-instant", groq_key)
+    print("[🧬] Synthesizing consensus...")
+    final_report = query_groq(f"Consolidate these reviews into a final report. If the code is good, include a markdown block with the final fixed code.\nSecurity: {sec_review}\nQA: {qa_review}", "llama-3.3-70b-versatile", groq_key)
+    return final_report
+
+def apply_patch_and_open_pr(patch_content, branch_name, token):
+    code_match = re.search(r"```rust\n(.*?)\n```", patch_content, re.DOTALL)
+    if not code_match:
+        print("[🔴] No code block found in proposal.")
+        return
+
+    # كتابة التعديل
+    with open("src/mips.rs", "w") as f:
+        f.write(code_match.group(1))
+    
+    # Git operations
+    subprocess.run(["git", "config", "--global", "user.name", "Room 110 Agent"])
+    subprocess.run(["git", "config", "--global", "user.email", "room110@agent.com"])
+    subprocess.run(["git", "checkout", "-b", branch_name])
+    subprocess.run(["git", "add", "src/mips.rs"])
+    subprocess.run(["git", "commit", "-m", "Room 110: Auto-patch applied via Council consensus"])
+    subprocess.run(["git", "push", "origin", branch_name])
+    
+    # فتح الـ PR باستخدام GitHub CLI
+    os.environ["GH_TOKEN"] = token
+    subprocess.run(["gh", "pr", "create", "--title", f"Auto-patch: {branch_name}", "--body", "تعديل مقترح من غرفة 110. خضع للمراجعة من قبل مجلس الخبراء. يرجى المراجعة والدمج."])
+    print(f"[✅] PR created successfully.")
 
 def main():
-    print("[Room 110] Initiating autonomous compiler development loop via Groq Architecture...")
-    
-    # Retrieve Groq Key
     groq_key = os.getenv("GROQ_API_KEY")
-    if not groq_key:
-        print("[🔴 CRITICAL ERROR] GROQ_API_KEY is missing from GitHub Secrets!")
+    token = os.getenv("GITHUB_TOKEN")
+    if not groq_key or not token:
+        print("[🔴] Missing required environment variables.")
         sys.exit(1)
-        
-    context = get_tech_context()
-    
-    # Locate the active compiler target
-    target_file = "src/mips.rs" if os.path.exists("src/mips.rs") else "mips.rs"
-    current_code = ""
-    if os.path.exists(target_file):
-        with open(target_file, "r", encoding="utf-8") as f:
-            current_code = f.read()
-    else:
-        current_code = "// BedRock Compiler source file not found or initializing."
 
-    discussion_prompt = f"""
-    You are the Lead Software Architect of Room 110, developing the BedRock Language Compiler.
-    Context: {context}
-    Current Code: {current_code}
-    Task: Propose the next logical development step or bug fix for the MIPS backend. Adhere to 'No Magic'.
-    """
-
-    print("[Room 110] Dispatching payload to Lead Architect (Llama-3.3-70B-Versatile)...")
-    proposal = query_groq(discussion_prompt, "llama-3.3-70b-versatile", groq_key)
+    # 1. القراءة
+    target = "src/mips.rs"
+    code = open(target, "r").read() if os.path.exists(target) else ""
     
-    if proposal:
-        print("[Room 110] Proposal acquired. Transitioning to Devil's Advocate (Llama-3.1-8B-Instant) for strict review...")
-        review_prompt = f"""
-        Review this proposed compiler mutation for BedRock:
-        {proposal}
-        Does this code break bare-metal MIPS validation or use implicit 'magic'? Provide the final consensus report.
-        """
-        final_review = query_groq(review_prompt, "llama-3.1-8b-instant", groq_key)
-        
-        print("\n=== 🏛️ ROOM 110 CONSENSUS REPORT ===\n")
-        print(final_review)
-        print("\n====================================\n")
-        
-        # Automate posting the comment to GitHub
-        issue_num = os.getenv("ISSUE_NUMBER")
-        repo = os.getenv("REPOSITORY")
-        github_token = os.getenv("GITHUB_TOKEN")
-        
-        if issue_num and repo and github_token:
-            comment_text = f"### 🏛️ Room 110 Autonomous Consensus Report\n\n{final_review}"
-            post_to_github_issue(repo, issue_num, github_token, comment_text)
-        else:
-            print("[Room 110] Run completed successfully. (Skip commenting: Not triggered by an Issue context).")
-    else:
-        print("[Room 110] Process aborted: Failed to fetch model responses.")
+    # 2. التخطيط
+    proposal = query_groq(f"Context: {get_tech_context()}\nCurrent: {code}\nTask: Propose a fix/improvement.", "llama-3.3-70b-versatile", groq_key)
+    
+    # 3. المراجعة
+    consensus = council_review(proposal, groq_key)
+    print(f"\n=== CONSENSUS ===\n{consensus}")
+    
+    # 4. التنفيذ
+    if "```rust" in consensus:
+        apply_patch_and_open_pr(consensus, f"fix/room110-{os.getenv('GITHUB_RUN_ID')}", token)
 
 if __name__ == "__main__":
     main()
