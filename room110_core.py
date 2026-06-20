@@ -4,15 +4,16 @@ import json
 import requests
 
 def get_tech_context():
-    """Fetches live architecture documentation from your website."""
-    url = "https://www.bedrock.abrdns.com"
+    """Fetches live architecture documentation from your personal website."""
+    # تم تصليح الرابط هنا لإزالة الـ www الزائدة عن النطاق الفرعي
+    url = "https://bedrock.abrdns.com"
     try:
         response = requests.get(url, timeout=15)
         if response.status_code == 200:
-            print("[Room 110] Live architectural context pulled successfully.")
+            print("[Room 110] Live architectural context pulled successfully from bedrock.abrdns.com.")
             return response.text[:8000]
     except Exception as e:
-        print(f"[Room 110] Warning: Falling back to hardcoded rules.")
+        print(f"[Room 110] Warning: Falling back to hardcoded rules. ({e})")
     
     return """
     Language: BedRock (.br), Core OS: Venilla OS.
@@ -43,6 +44,23 @@ def query_groq(prompt, model_name, api_key):
         print(f"[Room 110] ❌ Error querying Groq: {e}")
         return None
 
+def post_to_github_issue(repo, issue_num, token, comment_body):
+    """Posts the final consensus report as a comment directly on the triggered GitHub Issue."""
+    url = f"https://api.github.com/repos/{repo}/issues/{issue_num}/comments"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    payload = {"body": comment_body}
+    try:
+        res = requests.post(url, headers=headers, json=payload, timeout=15)
+        if res.status_code == 201:
+            print("[Room 110] Consensus report posted directly to GitHub Issue successfully!")
+        else:
+            print(f"[Room 110] Failed to post comment. Status: {res.status_code}")
+    except Exception as e:
+        print(f"[Room 110] Error posting to GitHub: {e}")
+
 def main():
     print("[Room 110] Initiating autonomous compiler development loop via Groq Architecture...")
     
@@ -70,12 +88,10 @@ def main():
     Task: Propose the next logical development step or bug fix for the MIPS backend. Adhere to 'No Magic'.
     """
 
-    # Updated to the new supported 70B model
     print("[Room 110] Dispatching payload to Lead Architect (Llama-3.3-70B-Versatile)...")
     proposal = query_groq(discussion_prompt, "llama-3.3-70b-versatile", groq_key)
     
     if proposal:
-        # Updated to the new supported 8B model
         print("[Room 110] Proposal acquired. Transitioning to Devil's Advocate (Llama-3.1-8B-Instant) for strict review...")
         review_prompt = f"""
         Review this proposed compiler mutation for BedRock:
@@ -87,7 +103,17 @@ def main():
         print("\n=== 🏛️ ROOM 110 CONSENSUS REPORT ===\n")
         print(final_review)
         print("\n====================================\n")
-        print("[Room 110] Run completed successfully.")
+        
+        # Automate posting the comment to GitHub
+        issue_num = os.getenv("ISSUE_NUMBER")
+        repo = os.getenv("REPOSITORY")
+        github_token = os.getenv("GITHUB_TOKEN")
+        
+        if issue_num and repo and github_token:
+            comment_text = f"### 🏛️ Room 110 Autonomous Consensus Report\n\n{final_review}"
+            post_to_github_issue(repo, issue_num, github_token, comment_text)
+        else:
+            print("[Room 110] Run completed successfully. (Skip commenting: Not triggered by an Issue context).")
     else:
         print("[Room 110] Process aborted: Failed to fetch model responses.")
 
