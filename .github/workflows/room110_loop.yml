@@ -1,35 +1,36 @@
 name: Room 110 Autonomous Loop
 
 on:
-  schedule:
-    - cron: '0 0 * * *'
-  push:
-    branches: [ main ]
-  issues:
-    types: [opened]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+
+permissions:
+  contents: write       # ضروري عشان الـ Commit والـ Push
+  pull-requests: write  # ضروري عشان الـ PR
+  issues: write         # عشان يكتب تقريره
 
 jobs:
   build-and-debate:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write # تعطي السيرفر صلاحية التعليق على الـ Issue
     steps:
-    - name: Checkout Repository Code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} # التوكن الأوتوماتيكي اللي جيت هاب بيوفره
 
-    - name: Setup Python Environment
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-    - name: Install Runtime Dependencies
-      run: pip install requests
+      - name: Install dependencies
+        run: pip install requests
 
-    - name: Execute Room 110 Core Orchestrator
-      env:
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # توكن تلقائي من جيت هاب للتعليق
-        ISSUE_NUMBER: ${{ github.event.issue.number }} # رقم الآشيو الحالي
-        REPOSITORY: ${{ github.repository }} # اسم الريبو بتاعك
-      run: python room110_core.py
+      - name: Run Room 110 Council
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # تمرير التوكن للسكربت
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: python room110_core.py
