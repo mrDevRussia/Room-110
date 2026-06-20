@@ -1,0 +1,16 @@
+[package]
+name = "bedrockco"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "bedrockco"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1.0"
+
+[build-dependencies]
+winres = "0.1"

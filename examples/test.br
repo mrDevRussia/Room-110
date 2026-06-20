@@ -1,0 +1,7 @@
+root TCB0 @u32 = 0x80030000;
+root TCB1 @u32 = 0x80030028;
+
+int timer_isr {
+    save_ctx TCB0;
+    restore_ctx TCB1;
+}
