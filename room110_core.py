@@ -1,80 +1,62 @@
 import os
-import subprocess
 import requests
 import re
+import subprocess
 import sys
 
-def get_tech_context():
-    url = "https://bedrock.abrdns.com"
+# 1. جلب قواعد اللغة من موقعك مباشرة
+def fetch_bedrock_rules():
     try:
-        response = requests.get(url, timeout=10)
-        return response.text[:8000] if response.status_code == 200 else ""
+        response = requests.get("https://bedrock.abrdns.com", timeout=10)
+        return response.text if response.status_code == 200 else "Rule: No magic. Byte-level validation."
     except:
-        return "Language: BedRock, Architecture: MIPS."
+        return "Rule: Default BedRock rules."
 
-def query_groq(prompt, model, key):
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-    payload = {"model": model, "messages": [{"role": "user", "content": prompt}]}
-    try:
-        res = requests.post(url, headers=headers, json=payload, timeout=60)
-        return res.json()['choices'][0]['message']['content']
-    except Exception as e:
-        print(f"[Error] Groq connection failed: {e}")
-        return None
+# 2. محرك تعدد النماذج (Multi-Agent Debate)
+def council_debate(task, code, rules, groq_key):
+    prompt = f"Rules: {rules}\nTask: {task}\nCode: {code}\n"
+    
+    # الخبير الأول
+    p1 = requests.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {groq_key}"}, json={
+        "model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": f"Propose a fix for: {prompt}"}]
+    }).json()['choices'][0]['message']['content']
+    
+    # الخبير الثاني (ينتقد)
+    p2 = requests.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {groq_key}"}, json={
+        "model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": f"Critique this proposal: {p1}. Provide a refined version with code."}]
+    }).json()['choices'][0]['message']['content']
+    
+    return p2
 
-def apply_and_push(patch, branch_name):
-    # استخراج الكود
-    code_match = re.search(r"```rust\n(.*?)\n```", patch, re.DOTALL)
-    if not code_match:
-        print("[🔴] No code found in Rust block.")
-        return False
-
-    with open("src/mips.rs", "w") as f:
-        f.write(code_match.group(1))
-
-    # تنفيذ أوامر Git (تم إضافة --verbose للدي-بج)
-    try:
-        subprocess.run(["git", "config", "--global", "user.name", "Room 110 Agent"], check=True)
-        subprocess.run(["git", "config", "--global", "user.email", "room110@agent.com"], check=True)
-        subprocess.run(["git", "checkout", "-b", branch_name], check=True)
-        subprocess.run(["git", "add", "src/mips.rs"], check=True)
-        subprocess.run(["git", "commit", "-m", "Room 110: Auto-patch applied"], check=True)
-        subprocess.run(["git", "push", "origin", branch_name], check=True)
-        print("[✅] Push successful.")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"[🔴] Git operation failed: {e}")
-        return False
+# 3. التنفيذ الذكي
+def execute_and_pr(consensus, token):
+    code_match = re.search(r"```rust\n(.*?)\n```", consensus, re.DOTALL)
+    if not code_match: return False
+    
+    # كتابة وتعديل
+    with open("src/mips.rs", "w") as f: f.write(code_match.group(1))
+    
+    # Git
+    subprocess.run(["git", "config", "user.name", "Room 110 Agent"])
+    subprocess.run(["git", "checkout", "-b", "auto-patch"])
+    subprocess.run(["git", "add", "src/mips.rs"])
+    subprocess.run(["git", "commit", "-m", "Room 110: Council-approved fix"])
+    subprocess.run(["git", "push", "origin", "auto-patch"])
+    
+    # PR
+    url = f"https://api.github.com/repos/{os.getenv('GITHUB_REPOSITORY')}/pulls"
+    requests.post(url, headers={"Authorization": f"token {token}"}, json={
+        "title": "Council Approved Fix", "head": "auto-patch", "base": "main", "body": consensus
+    })
+    return True
 
 def main():
-    groq_key = os.getenv("GROQ_API_KEY")
-    token = os.getenv("GITHUB_TOKEN")
-    if not groq_key or not token:
-        print("[🔴] Missing ENV vars.")
-        sys.exit(1)
-
-    code = open("src/mips.rs", "r").read() if os.path.exists("src/mips.rs") else ""
+    rules = fetch_bedrock_rules()
+    code = open("src/mips.rs").read()
+    issue_body = os.getenv("ISSUE_BODY", "No task provided.")
     
-    # 1. التخطيط
-    print("[🚀] Starting Council Analysis...")
-    proposal = query_groq(f"Context: {get_tech_context()}\nCurrent: {code}\nTask: Propose a fix.", "llama-3.3-70b-versatile", groq_key)
-    
-    # 2. المراجعة
-    print("[🛡️] Security & QA Review...")
-    consensus = query_groq(f"Review:\n{proposal}\nConsolidate into report + Rust code block.", "llama-3.3-70b-versatile", groq_key)
-    print(f"\n=== CONSENSUS ===\n{consensus}")
-    
-    # 3. التنفيذ
-    if "```rust" in consensus:
-        branch = f"fix/room110-{os.getenv('GITHUB_RUN_ID', 'default')}"
-        if apply_and_push(consensus, branch):
-            # استخدام curl للـ API لتفادي مشاكل الـ GH CLI
-            url = f"[https://api.github.com/repos/](https://api.github.com/repos/){os.getenv('GITHUB_REPOSITORY')}/pulls"
-            headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-            data = {"title": f"Auto-patch: {branch}", "head": branch, "base": "main", "body": "Proposed fix by Room 110 Council."}
-            requests.post(url, headers=headers, json=data)
-            print("[✅] PR Request Sent via API.")
+    consensus = council_debate(issue_body, code, rules, os.getenv("GROQ_API_KEY"))
+    execute_and_pr(consensus, os.getenv("GITHUB_TOKEN"))
 
 if __name__ == "__main__":
     main()
