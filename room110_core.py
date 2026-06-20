@@ -8,55 +8,62 @@ import sys
 def fetch_bedrock_rules():
     try:
         response = requests.get("https://bedrock.abrdns.com", timeout=10)
-        return response.text if response.status_code == 200 else "Rule: No magic. Byte-level validation."
+        return response.text if response.status_code == 200 else "Rule: No magic. Byte-level validation for MIPS."
     except:
-        return "Rule: Default BedRock rules."
+        return "Rule: No magic. Byte-level validation for MIPS."
 
-# 2. محرك تعدد النماذج (Multi-Agent Debate)
+# 2. حلقة النقاش (Multi-Agent Debate)
 def council_debate(task, code, rules, groq_key):
-    prompt = f"Rules: {rules}\nTask: {task}\nCode: {code}\n"
-    
-    # الخبير الأول
+    # خبير يقترح
     p1 = requests.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {groq_key}"}, json={
-        "model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": f"Propose a fix for: {prompt}"}]
+        "model": "llama-3.3-70b-versatile", 
+        "messages": [{"role": "system", "content": f"Rules: {rules}"}, {"role": "user", "content": f"Task: {task}\nCurrent Code:\n{code}\nPropose a fix."}]
     }).json()['choices'][0]['message']['content']
     
-    # الخبير الثاني (ينتقد)
+    # خبير ينتقد ويعدل
     p2 = requests.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {groq_key}"}, json={
-        "model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": f"Critique this proposal: {p1}. Provide a refined version with code."}]
+        "model": "llama-3.3-70b-versatile", 
+        "messages": [{"role": "system", "content": f"Rules: {rules}"}, {"role": "user", "content": f"Critique this proposal: {p1}. Refine it and provide final Rust code in ```rust block```."}]
     }).json()['choices'][0]['message']['content']
     
     return p2
 
-# 3. التنفيذ الذكي
-def execute_and_pr(consensus, token):
+# 3. التنفيذ
+def execute_and_pr(consensus, token, repo):
     code_match = re.search(r"```rust\n(.*?)\n```", consensus, re.DOTALL)
     if not code_match: return False
     
-    # كتابة وتعديل
+    # كتابة التعديل
+    if not os.path.exists("src"): os.makedirs("src")
     with open("src/mips.rs", "w") as f: f.write(code_match.group(1))
     
     # Git
     subprocess.run(["git", "config", "user.name", "Room 110 Agent"])
-    subprocess.run(["git", "checkout", "-b", "auto-patch"])
+    subprocess.run(["git", "config", "user.email", "room110@agent.com"])
+    branch = f"patch-{os.getenv('GITHUB_RUN_ID')}"
+    subprocess.run(["git", "checkout", "-b", branch])
     subprocess.run(["git", "add", "src/mips.rs"])
     subprocess.run(["git", "commit", "-m", "Room 110: Council-approved fix"])
-    subprocess.run(["git", "push", "origin", "auto-patch"])
+    subprocess.run(["git", "push", "origin", branch])
     
     # PR
-    url = f"https://api.github.com/repos/{os.getenv('GITHUB_REPOSITORY')}/pulls"
+    url = f"https://api.github.com/repos/{repo}/pulls"
     requests.post(url, headers={"Authorization": f"token {token}"}, json={
-        "title": "Council Approved Fix", "head": "auto-patch", "base": "main", "body": consensus
+        "title": "Council Approved Fix", "head": branch, "base": "main", "body": consensus
     })
     return True
 
 def main():
     rules = fetch_bedrock_rules()
-    code = open("src/mips.rs").read()
-    issue_body = os.getenv("ISSUE_BODY", "No task provided.")
+    code = open("src/mips.rs").read() if os.path.exists("src/mips.rs") else ""
+    task = os.getenv("ISSUE_BODY", "No specific task.")
     
-    consensus = council_debate(issue_body, code, rules, os.getenv("GROQ_API_KEY"))
-    execute_and_pr(consensus, os.getenv("GITHUB_TOKEN"))
+    # ابدأ النقاش
+    consensus = council_debate(task, code, rules, os.getenv("GROQ_API_KEY"))
+    
+    # نفذ الـ PR
+    if execute_and_pr(consensus, os.getenv("GITHUB_TOKEN"), os.getenv("GITHUB_REPOSITORY")):
+        print("PR successfully created.")
 
 if __name__ == "__main__":
     main()
