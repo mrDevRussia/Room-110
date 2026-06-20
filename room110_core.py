@@ -46,7 +46,7 @@ def query_groq(prompt, model_name, api_key):
 def main():
     print("[Room 110] Initiating autonomous compiler development loop via Groq Architecture...")
     
-    # Retrieve only Groq Key now
+    # Retrieve Groq Key
     groq_key = os.getenv("GROQ_API_KEY")
     if not groq_key:
         print("[🔴 CRITICAL ERROR] GROQ_API_KEY is missing from GitHub Secrets!")
@@ -70,17 +70,19 @@ def main():
     Task: Propose the next logical development step or bug fix for the MIPS backend. Adhere to 'No Magic'.
     """
 
-    print("[Room 110] Dispatching payload to Lead Architect (Llama-3-70B)...")
-    proposal = query_groq(discussion_prompt, "llama3-70b-8192", groq_key)
+    # Updated to the new supported 70B model
+    print("[Room 110] Dispatching payload to Lead Architect (Llama-3.3-70B-Versatile)...")
+    proposal = query_groq(discussion_prompt, "llama-3.3-70b-versatile", groq_key)
     
     if proposal:
-        print("[Room 110] Proposal acquired. Transitioning to Devil's Advocate (Llama-3-8B) for strict review...")
+        # Updated to the new supported 8B model
+        print("[Room 110] Proposal acquired. Transitioning to Devil's Advocate (Llama-3.1-8B-Instant) for strict review...")
         review_prompt = f"""
         Review this proposed compiler mutation for BedRock:
         {proposal}
         Does this code break bare-metal MIPS validation or use implicit 'magic'? Provide the final consensus report.
         """
-        final_review = query_groq(review_prompt, "llama3-8b-8192", groq_key)
+        final_review = query_groq(review_prompt, "llama-3.1-8b-instant", groq_key)
         
         print("\n=== 🏛️ ROOM 110 CONSENSUS REPORT ===\n")
         print(final_review)
