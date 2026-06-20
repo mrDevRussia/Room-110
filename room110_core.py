@@ -21,21 +21,32 @@ def get_tech_context():
     """
 
 def query_gemini(prompt, api_key):
-    """Invokes Gemini 1.5 Flash to act as the Lead Architect and propose compiler mutations."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    headers = {'Content-Type': 'application/json'}
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
+    """Invokes Gemini 1.5 Flash adaptively based on the key type (API Key vs Cloud Access Token)."""
+    # Clean any accidental spaces or newlines from the key
+    api_key = api_key.strip()
+    
+    # Mode 1: Standard AI Studio Key
+    if api_key.startswith("AIzaSy"):
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        headers = {'Content-Type': 'application/json'}
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    
+    # Mode 2: Cloud Access Token (Starts with AQ. or other enterprise formats)
+    else:
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}' # Passing the AQ token securely in the headers
+        }
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=30)
         data = res.json()
         
-        # التأكد من وجود رد سليم
         if 'candidates' in data:
             return data['candidates'][0]['content']['parts'][0]['text']
         else:
-            # لو جوجل بعتت إيرور، هنطبع الإيرور نفسه عشان نفهمه
             print(f"[Room 110] ❌ Gemini API Error Details: {json.dumps(data, indent=2)}")
             return None
             
