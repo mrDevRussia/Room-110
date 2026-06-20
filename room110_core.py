@@ -15,8 +15,9 @@ import requests
 # ==========================================
 # CONFIGURATION & CONSTANTS
 # ==========================================
-BEDROCK_RULES_URL = "https://bedrock.abrdns.com"
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# URLs are broken into pieces to prevent UI/Clipboard auto-link corruption
+BEDROCK_RULES_URL = "".join(["https://", "bedrock", ".abrdns", ".com"])
+GROQ_API_URL = "".join(["https://", "api", ".groq", ".com/openai/v1/chat/completions"])
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
 # Target extensions for repository scanning
@@ -197,7 +198,8 @@ class GitHubNativeClient:
     def __init__(self, token: str, repo: str):
         self.token = token
         self.repo = repo
-        self.base_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){repo}"
+        # Constructed safely in split segments to destroy markdown URL injection artifacts
+        self.base_url = "".join(["https://", "api", ".github", ".com/repos/", repo])
         self.headers = {
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json",
@@ -222,7 +224,7 @@ class GitHubNativeClient:
         self.check_response_status(res, f"Fetching git commit reference SHA for branch: {branch}")
         return res.json()["object"]["sha"]
 
-    def get_repository_tree(self, branch_sha: str) -> list:
+    def get_repository_tree((self, branch_sha: str) -> list:
         """Fetches the complete repository directory structural path tree recursively in a single run."""
         url = f"{self.base_url}/git/trees/{branch_sha}?recursive=1"
         res = requests.get(url, headers=self.headers)
