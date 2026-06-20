@@ -1,0 +1,30 @@
+name: Room 110 Autonomous Loop
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Fires automatically every day at 12:00 AM UTC (Zero footprint)
+  push:
+    branches: [ main ] # Fires immediately when you push new code
+  issues:
+    types: [opened] # Fires immediately when you open a new issue/task on GitHub
+
+jobs:
+  build-and-debate:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository Code
+      uses: actions/checkout@v3
+
+    - name: Setup Python Environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install Runtime Dependencies
+      run: pip install requests
+
+    - name: Execute Room 110 Core Orchestrator
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      run: python room110_core.py
