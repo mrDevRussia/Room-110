@@ -23,9 +23,12 @@ GROQ_MODEL = "llama-3.3-70b-versatile"
 TARGET_EXTENSIONS = [".rs"]
 HISTORY_LOG_PATH = "refactor_history.log"
 
-# Maximum character threshold to safeguard the 12,000 Groq TPM tier limit
-# 1 token ~ 4 characters. Leaving ample buffer space for system prompts.
-MAX_FILE_CHAR_LIMIT = 28000 
+# Aggressive safeguard for ultra-low 12,000 Groq TPM tier limit
+# 12,000 characters ~ 3,000 tokens. Leaves huge headroom for prompts and responses.
+MAX_FILE_CHAR_LIMIT = 12000 
+
+# Pacing delay (seconds) between file audits to let the TPM rate limit bucket reset
+API_COOLDOWN_DELAY = 25
 
 FALLBACK_RULES = """
 Rule 1: Strict MIPS byte-level and alignment validation.
@@ -82,8 +85,8 @@ def safe_groq_api_call(headers: dict, payload: dict) -> str:
         response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=60)
         if response.status_code != 200:
             print(f"[⚠️] Groq API request returned status code: {response.status_code}")
-            if response.status_code == 413 or "tokens" in response.text:
-                print("[⚠️] Context payload is too large for the active TPM rate limit tier.")
+            if response.status_code in [413, 429] or "tokens" in response.text:
+                print("[⚠️] Rate limit or token threshold hit. Skipping element to preserve workflow.")
             return None
             
         data = response.json()
@@ -139,6 +142,9 @@ def run_council_debate(file_path: str, current_code: str, rules: str, groq_key: 
         return None, ""
         
     print(f"[🤖 Agent 1] Optimization proposal formulated for '{file_path}'.")
+    
+    # Enforce pacing delay between agent internal handoffs to prevent TPM exhaustion
+    time.sleep(5)
     
     # 2. Reviewer Agent inspects and refines the proposal
     print(f"[🤖 Agent 2] Stress-testing and reviewing the proposal for '{file_path}'...")
@@ -356,9 +362,9 @@ def main():
         if not current_code:
             continue
             
-        # PROACTIVE SIZE GUARD: Skip individual massive files to protect the TPM tier limit
+        # PROACTIVE SIZE GUARD: Exclude files that violate the ultra-strict 12k TPM ceiling
         if len(current_code) > MAX_FILE_CHAR_LIMIT:
-            print(f"[⚠️] Skipping '{file_path}' - File size ({len(current_code)} chars) exceeds maximum token budget budget for this Groq tier.")
+            print(f"[⚠️] Skipping '{file_path}' - File size ({len(current_code)} chars) exceeds targeted safe tier threshold ({MAX_FILE_CHAR_LIMIT} chars).")
             continue
             
         consensus_raw, audit_trail = run_council_debate(file_path, current_code, rules, groq_key)
@@ -376,9 +382,13 @@ def main():
             else:
                 print(f"[⚠️] Failed to parse a valid uncorrupted pure Rust snippet block for artifact path: {file_path}")
 
+            # Apply a calculated delay after a successful processing iteration to reset the TPM bucket
+            print(f"[⏱️] Cooling down for {API_COOLDOWN_DELAY} seconds to safeguard Groq TPM rate limits...")
+            time.sleep(API_COOLDOWN_DELAY)
+
     # 4. Processing refactoring tasks if delta changes are present
     if not pending_changes:
-        print("\n[🎉] Complete workspace architecture sweep finished. Codebase is flawless. No optimization interventions required.")
+        print("\n[🎉] Complete workspace architecture sweep finished. Codebase is stable within the evaluated file-size spectrum.")
         if learnings_found:
             print("[📝] Syncing historical evolution training updates directly on base branch mapping...")
             gh.commit_file_change(HISTORY_LOG_PATH, updated_history, "Room 110: Update intelligence and learnings history [skip ci]", base_branch, history_sha)
