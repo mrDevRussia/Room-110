@@ -15,7 +15,6 @@ import requests
 # ==========================================
 # CONFIGURATION & CONSTANTS
 # ==========================================
-# URLs are broken into pieces to prevent UI/Clipboard auto-link corruption
 BEDROCK_RULES_URL = "".join(["https://", "bedrock", ".abrdns", ".com"])
 GROQ_API_URL = "".join(["https://", "api", ".groq", ".com/openai/v1/chat/completions"])
 GROQ_MODEL = "llama-3.3-70b-versatile"
@@ -24,7 +23,10 @@ GROQ_MODEL = "llama-3.3-70b-versatile"
 TARGET_EXTENSIONS = [".rs"]
 HISTORY_LOG_PATH = "refactor_history.log"
 
-# Fallback specifications if the remote server is unreachable
+# Maximum character threshold to safeguard the 12,000 Groq TPM tier limit
+# 1 token ~ 4 characters. Leaving ample buffer space for system prompts.
+MAX_FILE_CHAR_LIMIT = 28000 
+
 FALLBACK_RULES = """
 Rule 1: Strict MIPS byte-level and alignment validation.
 Rule 2: Eliminate redundant register allocations and optimize branch delays.
@@ -75,31 +77,24 @@ def fetch_bedrock_rules() -> str:
         return FALLBACK_RULES
 
 def safe_groq_api_call(headers: dict, payload: dict) -> str:
-    """Executes validated calls to the Groq API, safely managing formatting structures."""
+    """Executes validated calls to the Groq API with fault-tolerant error logging."""
     try:
         response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=60)
-    except Exception as e:
-        print(f"[🔴] Network connection failure with Groq API: {str(e)}")
-        sys.exit(1)
-        
-    if response.status_code != 200:
-        print(f"[🔴] Groq API request failed with status code: {response.status_code}")
-        print(f"[🔴] Raw server response:\n{response.text}")
-        sys.exit(1)
-        
-    try:
+        if response.status_code != 200:
+            print(f"[⚠️] Groq API request returned status code: {response.status_code}")
+            if response.status_code == 413 or "tokens" in response.text:
+                print("[⚠️] Context payload is too large for the active TPM rate limit tier.")
+            return None
+            
         data = response.json()
+        if 'choices' not in data or not data['choices']:
+            print("[⚠️] Groq API returned an empty choice payload structure.")
+            return None
+            
+        return data['choices'][0]['message']['content']
     except Exception as e:
-        print(f"[🔴] Failed to parse JSON response payload: {str(e)}")
-        print(f"[🔴] Raw text received:\n{response.text}")
-        sys.exit(1)
-        
-    if 'choices' not in data or not data['choices']:
-        print("[🔴] Invalid structure: Missing or empty 'choices' field in Groq API response.")
-        print(f"[🔴] Full payload response:\n{json.dumps(data, indent=2)}")
-        sys.exit(1)
-        
-    return data['choices'][0]['message']['content']
+        print(f"[⚠️] Non-fatal exception occurred during Groq interaction: {str(e)}")
+        return None
 
 # ==========================================
 # MULTI-AGENT COUNCIL DEBATE LOOP
@@ -135,6 +130,9 @@ def run_council_debate(file_path: str, current_code: str, rules: str, groq_key: 
     }
     
     proposal_output = safe_groq_api_call(headers, proposal_payload)
+    if not proposal_output:
+        print(f"[⚠️] Could not obtain a clean response from Proposal Agent for '{file_path}'. Skipping.")
+        return None, ""
     
     if "NO_CHANGES_REQUIRED" in proposal_output:
         print(f"[✅] Proposal Agent verified that '{file_path}' is optimal. Skipping refactor.")
@@ -169,6 +167,10 @@ def run_council_debate(file_path: str, current_code: str, rules: str, groq_key: 
     }
     
     final_consensus = safe_groq_api_call(headers, reviewer_payload)
+    if not final_consensus:
+        print(f"[⚠️] Could not obtain a final verification from Reviewer Agent for '{file_path}'. Skipping.")
+        return None, ""
+        
     print(f"[✅] Consensus reached and validated successfully for '{file_path}'.")
     
     # Generate structured Markdown report trail for GitHub PR description
@@ -198,7 +200,6 @@ class GitHubNativeClient:
     def __init__(self, token: str, repo: str):
         self.token = token
         self.repo = repo
-        # Constructed safely in split segments to destroy markdown URL injection artifacts
         self.base_url = "".join(["https://", "api", ".github", ".com/repos/", repo])
         self.headers = {
             "Authorization": f"token {token}",
@@ -353,6 +354,11 @@ def main():
         print(f"\n[🔍] Actively scanning file artifact path: {file_path}")
         current_code, file_sha = gh.get_file_metadata(file_path, base_branch)
         if not current_code:
+            continue
+            
+        # PROACTIVE SIZE GUARD: Skip individual massive files to protect the TPM tier limit
+        if len(current_code) > MAX_FILE_CHAR_LIMIT:
+            print(f"[⚠️] Skipping '{file_path}' - File size ({len(current_code)} chars) exceeds maximum token budget budget for this Groq tier.")
             continue
             
         consensus_raw, audit_trail = run_council_debate(file_path, current_code, rules, groq_key)
