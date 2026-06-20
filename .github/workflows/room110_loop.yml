@@ -2,15 +2,17 @@ name: Room 110 Autonomous Loop
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Fires automatically every day at 12:00 AM UTC (Zero footprint)
+    - cron: '0 0 * * *'
   push:
-    branches: [ main ] # Fires immediately when you push new code
+    branches: [ main ]
   issues:
-    types: [opened] # Fires immediately when you open a new issue/task on GitHub
+    types: [opened]
 
 jobs:
   build-and-debate:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write # تعطي السيرفر صلاحية التعليق على الـ Issue
     steps:
     - name: Checkout Repository Code
       uses: actions/checkout@v3
@@ -27,4 +29,7 @@ jobs:
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # توكن تلقائي من جيت هاب للتعليق
+        ISSUE_NUMBER: ${{ github.event.issue.number }} # رقم الآشيو الحالي
+        REPOSITORY: ${{ github.repository }} # اسم الريبو بتاعك
       run: python room110_core.py
