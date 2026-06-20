@@ -19,7 +19,7 @@ BEDROCK_RULES_URL = "".join(["https://", "bedrock", ".abrdns", ".com"])
 GROQ_API_URL = "".join(["https://", "api", ".groq", ".com/openai/v1/chat/completions"])
 
 # التبديل إلى نموذج 8B لتفادي قيود الـ TPM الصارمة للنموذج الأكبر
-GROQ_MODEL = "llama3-8b-8192"
+GROQ_MODEL = "llama-3.1-8b-instant"
 
 # Target extensions for repository scanning
 TARGET_EXTENSIONS = [".rs"]
