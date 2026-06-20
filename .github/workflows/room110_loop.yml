@@ -2,7 +2,7 @@ name: Room 110 Autonomous Loop
 
 on:
   issues:
-    types: [opened]
+    types: [opened, reopened]
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -13,16 +13,15 @@ permissions:
   issues: write
 
 jobs:
-  build-and-debate:
+  run-agent:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
@@ -30,10 +29,9 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Run Room 110 Council
+      - name: Run Agent
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.comment.issue_url.split('/').pop() }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: python room110_core.py
