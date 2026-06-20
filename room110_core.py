@@ -224,7 +224,7 @@ class GitHubNativeClient:
         self.check_response_status(res, f"Fetching git commit reference SHA for branch: {branch}")
         return res.json()["object"]["sha"]
 
-    def get_repository_tree((self, branch_sha: str) -> list:
+    def get_repository_tree(self, branch_sha: str) -> list:
         """Fetches the complete repository directory structural path tree recursively in a single run."""
         url = f"{self.base_url}/git/trees/{branch_sha}?recursive=1"
         res = requests.get(url, headers=self.headers)
