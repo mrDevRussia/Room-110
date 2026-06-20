@@ -1,0 +1,12 @@
+; BedRock-IR
+; --target ir
+
+    Mov %TCB0, 2147680256
+    Mov %TCB1, 2147680296
+    Go main_entry_0
+timer_isr:
+    SaveCtx TCB0
+    RestoreCtx TCB1
+    Ret 
+main_entry_0:
+    Halt 
