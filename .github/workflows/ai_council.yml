@@ -1,0 +1,85 @@
+name: Autonomous AI Council Engine
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-council:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Base Dependencies
+        run: pip install requests
+
+      - name: Generate Source Context
+        run: python ai_council/context_builder.py
+
+      - name: Execute AI Council Session
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: python ai_council/council_agent.py
+
+      - name: Parse Council Decision
+        id: parse_decision
+        run: |
+          if [ -f action_trigger.txt ]; then
+            DECISION=$(cat action_trigger.txt)
+            echo "decision=$DECISION" >> $GITHUB_OUTPUT
+          else
+            echo "decision=NONE" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Handle MINOR Update (Direct Autonomous Push)
+        if: steps.parse_decision.outputs.decision == 'MINOR'
+        run: |
+          git config --global user.name "AI Council Bot"
+          git config --global user.email "ai-council-bot@github.com"
+          
+          rm -f project_context.md action_trigger.txt
+          
+          git add .
+          git commit -m "chore(auto-patch): minor optimization implemented by AI Council"
+          git push origin main
+
+      - name: Handle MAJOR Update (Create Pull Request for Approval)
+        if: steps.parse_decision.outputs.decision == 'MAJOR'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "AI Council Bot"
+          git config --global user.email "ai-council-bot@github.com"
+          
+          BRANCH_NAME="ai-council-major-patch-$(date +%s)"
+          git checkout -b $BRANCH_NAME
+          
+          rm -f project_context.md action_trigger.txt
+          
+          git add .
+          git commit -m "feat(major-change): critical architectural update proposed by AI Council"
+          git push origin $BRANCH_NAME
+          
+          gh pr create --title "⚠️ AI Council: Core Structural Review Required" --body "This pull request contains a MAJOR structural or architectural modification to your compiler. Human verification and approval is strictly required." --base main --head $BRANCH_NAME
+
+      - name: Send Notification for MAJOR updates
+        if: steps.parse_decision.outputs.decision == 'MAJOR'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "⚠️ Action Required: AI Council proposed a MAJOR change!"
+          body: "Hello! The AI Council wants to implement a radical/major feature or structural change to your compiler. A Pull Request is pending your manual review and merge approval."
+          to: ${{ secrets.EMAIL_USERNAME }}
+          from: AI Council Engine
