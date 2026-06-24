@@ -18,8 +18,7 @@ def build_repository_context(root_dir="."):
         for f in files:
             if f not in EXCLUDE_FILES and os.path.splitext(f)[1] in ALLOWED_EXTENSIONS:
                 context_output += f"{sub_indent}{f}\n"
-    context_output += "
-```\n\n"
+    context_output += "```\n\n"
 
     # 2. Append file contents
     context_output += "## Source Code Files\n\n"
@@ -38,8 +37,7 @@ def build_repository_context(root_dir="."):
                 context_output += f"### File: {relative_path}\n"
                 context_output += f"```{os.path.splitext(file)[1][1:]}\n"
                 context_output += f"{content}\n"
-                context_output += "
-```\n\n"
+                context_output += "```\n\n"
             except Exception as e:
                 print(f"Skipping {relative_path} due to error: {e}")
                 

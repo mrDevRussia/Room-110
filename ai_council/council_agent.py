@@ -58,7 +58,7 @@ def main():
 
     # Step 2: Qwen writes the actual code
     print("Agent 2 (Qwen) is generating implementation code...")
-    qwen_system = "You are an elite systems engineer. Implement the architectural proposal perfectly. Output file paths and code contents within markdown code blocks. Always prefix files with '### File: path/to/file'."
+    qwen_system = "You are an elite systems engineer. Implement the architectural proposal perfectly. Output file paths and code contents within markdown code blocks. Always prefix files with '### File: path/to/file.ext'."  
     qwen_user = f"Implement this proposal:\n{proposal}\n\nInside this context:\n{repo_context}"
     
     engineered_code = call_openrouter("qwen/qwen-2.5-72b-instruct:free", qwen_system, qwen_user)
